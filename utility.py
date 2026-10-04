@@ -111,7 +111,7 @@ def traceback_text(error):
     traceback.print_exception(type(error), error, error.__traceback__, file=traceback_buffer)
     return  traceback_buffer.getvalue()
 
-def require(value: T | None, name: str) -> T:
+def require(value: Optional[T], name: str) -> T:
     if value is None:
         raise EnvironmentError(f"Failed to find required Discord entity: {name}")
     return value
@@ -135,6 +135,11 @@ class Helper:
             logging.warning("Could not load secondary output channel from environment, continuing without it")
         if self.SecondaryOutputChannel and not isinstance(self.SecondaryOutputChannel, nextcord.abc.Messageable):
             logging.warning("Secondary output channel not messageable, continuing without it")
+        try:
+            self.ArchiveNotifyChannelId = int(os.environ['ARCHIVE_NOTIFY_CHANNEL_ID'])
+        except (KeyError, ValueError):
+            self.ArchiveNotifyChannelId = None
+            logging.warning("ARCHIVE_NOTIFY_CHANNEL_ID not set, archive notifications disabled")
         self.StorageLocation = os.environ['STORAGE_LOCATION']
         self.OwnerId = int(os.environ['OWNER_ID'])
 
@@ -230,3 +235,18 @@ class Helper:
 
     async def log(self, log_string: str):
         await self.LogChannel.send(log_string)
+
+    async def get_archive_notify_channel(self) -> Optional[nextcord.abc.Messageable]:
+        if self.ArchiveNotifyChannelId is None:
+            return None
+        channel = self.bot.get_channel(self.ArchiveNotifyChannelId)
+        if channel is None:
+            try:
+                channel = await self.bot.fetch_channel(self.ArchiveNotifyChannelId)
+            except nextcord.HTTPException:
+                logging.warning(f"Could not fetch archive notify channel {self.ArchiveNotifyChannelId}")
+                return None
+        if not isinstance(channel, nextcord.abc.Messageable):
+            logging.warning("Archive notify channel is not messageable")
+            return None
+        return channel
